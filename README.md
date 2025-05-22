@@ -1,5 +1,7 @@
 # 🐳 docker-port-list
 
+||!|| PROJET VIBE CODING ||!||
+
 **Un utilitaire bash stylé pour visualiser les ports exposés par vos conteneurs Docker, regroupés par projet.**
 
 Ce script vous permet d’obtenir une vision claire et rapide de vos conteneurs Docker actifs, leurs IP internes, les ports exposés, et ce projet par projet (via `docker-compose`), avec un affichage coloré façon "terminal de film de hacker" 💚.
