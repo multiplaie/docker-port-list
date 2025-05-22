@@ -2,68 +2,56 @@
 
 # 👨‍💻 Script: docker-port-list — version cinéma hacker
 # Affiche les conteneurs Docker actifs regroupés par stack avec un affichage stylé vert néon
-# Options: --no-style, --json, --hacker (par défaut), --short (affiche seulement résumé des ports)
+# Options:
+#   --short : n'affiche que le résumé des ports exposés
+#   --json  : affiche en JSON (compatible avec --short)
+#   --no-style : style simple (vert basique)
 
-# Couleurs et effets
 GREEN='\033[0;92m'
 BOLD='\033[1m'
 RESET='\033[0m'
 
-# Gestion des options
-STYLE=1   # 1 = hacker, 0 = no-style
-JSON=0
 SHORT=0
+JSON=0
+STYLE=1
 
-while [[ $# -gt 0 ]]; do
-  case $1 in
-    --no-style)
-      STYLE=0
-      shift
-      ;;
-    --json)
-      JSON=1
-      STYLE=0
-      shift
-      ;;
-    --hacker)
-      STYLE=1
-      JSON=0
-      shift
-      ;;
-    --short)
-      SHORT=1
-      shift
-      ;;
-    *)
-      echo "Option inconnue : $1"
-      exit 1
-      ;;
-  esac
+# Parse options
+for arg in "$@"; do
+    case "$arg" in
+        --short) SHORT=1 ;;
+        --json) JSON=1 ;;
+        --no-style) STYLE=0 ;;
+        *) echo "Option inconnue : $arg"; exit 1 ;;
+    esac
 done
 
-# Récupération et résumé des ports exposés
-get_ports_summary() {
-    local containers ports_line host_port
-    containers=$(docker ps -q)
-    declare -A ports_summary
+# Récupère tous les containers actifs
+containers=$(docker ps -q)
 
+declare -A ports_summary
+
+get_ports_summary() {
+    local ports_array=()
     for id in $containers; do
         ports=$(docker port "$id")
         while IFS= read -r line; do
             host_port=$(echo "$line" | awk -F'->' '{print $2}' | awk -F':' '{print $2}')
-            [ -n "$host_port" ] && ports_summary["$host_port"]=1
+            if [ -n "$host_port" ]; then
+                ports_summary["$host_port"]=1
+            fi
         done <<< "$ports"
     done
-
-    echo "${!ports_summary[@]}"
+    for port in "${!ports_summary[@]}"; do
+        ports_array+=("$port")
+    done
+    echo "${ports_array[@]}"
 }
 
-# Affichage résumé hacker
 print_summary_hacker() {
     local ports=("$@")
     echo -e "${BOLD}${GREEN}╔═ Résumé des ports exposés sur la machine ═══════════════════════════╗${RESET}"
     if [[ ${#ports[@]} -eq 0 ]]; then
-        echo -e "${GREEN}║ Aucun port exposé                                                 ║"
+        echo -e "${GREEN}║ Aucun port exposé                                                 ║${RESET}"
     else
         for port in "${ports[@]}"; do
             printf "${GREEN}║ Port %-63s ║\n" "$port"
@@ -72,38 +60,34 @@ print_summary_hacker() {
     echo -e "${GREEN}╚══════════════════════════════════════════════════════════════════════╝${RESET}\n"
 }
 
-# Affichage résumé simple
 print_summary_simple() {
     local ports=("$@")
-    echo "Résumé des ports exposés :"
+    echo "Résumé des ports exposés sur la machine :"
     if [[ ${#ports[@]} -eq 0 ]]; then
         echo "Aucun port exposé"
     else
         for port in "${ports[@]}"; do
-            echo " - $port"
-        done | sort -n -k1
+            echo "- Port $port"
+        done | sort -n -k2
     fi
+    echo
 }
 
-# Affichage résumé JSON
 print_summary_json() {
     local ports=("$@")
-    echo "{"
-    echo '  "ports": ['
+    echo -n '{ "ports": ['
     local first=1
     for port in "${ports[@]}"; do
-        if (( first == 0 )); then
-            echo ","
+        if [[ $first -eq 1 ]]; then
+            first=0
+        else
+            echo -n ', '
         fi
-        echo "    \"$port\""
-        first=0
+        echo -n "\"$port\""
     done
-    echo
-    echo "  ]"
-    echo "}"
+    echo '] }'
 }
 
-# Fonction affichage complet hacker (version cinéma)
 print_hacker() {
     echo -e "${GREEN}${BOLD}"
     echo "╔═══════════════════════════════════════════════════╗"
@@ -123,15 +107,11 @@ print_hacker() {
     echo -e "${GREEN}✔ Conteneurs détectés.${RESET}\n"
     sleep 0.5
 
-    containers=$(docker ps -q)
-    declare -A ports_summary
-
     # Récupération des projets docker-compose (label)
     projects=$(for id in $containers; do
         docker inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' "$id"
     done | sort -u)
 
-    # Affichage par projet
     for project in $projects; do
         [ -z "$project" ] && continue
         echo -e "${BOLD}${GREEN}╔═ Project: $project ═════════════════════════════════════════════════╗${RESET}"
@@ -177,110 +157,167 @@ print_hacker() {
     done
     echo -e "${GREEN}╚══════════════════════════════════════════════════════════════════════╝${RESET}"
 
-    # Résumé final
-    echo
-    print_summary_hacker "${!ports_summary[@]}"
+    echo -e "${BOLD}${GREEN}→ Pour un résumé des ports exposés, lance : ./docker-port-list.sh --short${RESET}\n"
 }
 
-# Fonction affichage complet simple
 print_simple() {
-    containers=$(docker ps -q)
-    declare -A ports_summary
+    echo "Scan des conteneurs Docker actifs :"
+    echo "-------------------------------"
+    sleep 0.3
 
-    echo "SCAN DES CONTENEURS DOCKER"
-    echo "------------------------------------------------------------"
-    echo "CONTAINER                     IP INTERNE      PORTS EXPOSES"
-    echo "------------------------------------------------------------"
+    # Récupération des projets docker-compose (label)
+    projects=$(for id in $containers; do
+        docker inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' "$id"
+    done | sort -u)
 
-    for id in $containers; do
-        name=$(docker inspect -f '{{.Name}}' "$id" | cut -c2-)
-        ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$id")
-        ports=$(docker port "$id")
-        ports_display=$(echo "$ports" | paste -sd "," -)
-        printf "%-28s %-15s %s\n" "$name" "$ip" "${ports_display:-Aucun}"
-        while IFS= read -r line; do
-            host_port=$(echo "$line" | awk -F'->' '{print $2}' | awk -F':' '{print $2}')
-            [ -n "$host_port" ] && ports_summary["$host_port"]=1
-        done <<< "$ports"
+    for project in $projects; do
+        [ -z "$project" ] && continue
+        echo "Project : $project"
+        printf "%-28s | %-15s | %-30s\n" "CONTAINER" "IP INTERNE" "PORTS EXPOSES"
+        echo "--------------------------------------------------------------------"
+
+        for id in $containers; do
+            project_label=$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' "$id")
+            if [[ "$project_label" == "$project" ]]; then
+                name=$(docker inspect -f '{{.Name}}' "$id" | cut -c2-)
+                ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$id")
+                ports=$(docker port "$id")
+                ports_display=$(echo "$ports" | paste -sd "," -)
+                printf "%-28s | %-15s | %-30s\n" "$name" "$ip" "${ports_display:-Aucun}"
+                while IFS= read -r line; do
+                    host_port=$(echo "$line" | awk -F'->' '{print $2}' | awk -F':' '{print $2}')
+                    [ -n "$host_port" ] && ports_summary["$host_port"]=1
+                done <<< "$ports"
+            fi
+        done
+        echo
     done
 
-    echo
-    echo "Résumé des ports exposés sur la machine :"
-    if [[ ${#ports_summary[@]} -eq 0 ]]; then
-        echo "Aucun port exposé"
-    else
-        for port in "${!ports_summary[@]}"; do
-            echo "Port $port"
-        done | sort -n -k1
-    fi
-}
+    echo "Autres conteneurs (non compose) :"
+    printf "%-28s | %-15s | %-30s\n" "CONTAINER" "IP INTERNE" "PORTS EXPOSES"
+    echo "--------------------------------------------------------------------"
 
-# Fonction affichage complet JSON
-print_json() {
-    containers=$(docker ps -q)
-    declare -A ports_summary
-    echo "{"
-    echo '  "containers": ['
-
-    first_container=1
     for id in $containers; do
-        if (( first_container == 0 )); then
-            echo ","
-        fi
-        first_container=0
-
-        name=$(docker inspect -f '{{.Name}}' "$id" | cut -c2-)
-        ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$id")
-
-        ports=$(docker port "$id")
-        ports_json="[]"
-        if [[ -n "$ports" ]]; then
-            ports_json="["
-            first_port=1
+        project_label=$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' "$id")
+        if [[ -z "$project_label" ]]; then
+            name=$(docker inspect -f '{{.Name}}' "$id" | cut -c2-)
+            ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$id")
+            ports=$(docker port "$id")
+            ports_display=$(echo "$ports" | paste -sd "," -)
+            printf "%-28s | %-15s | %-30s\n" "$name" "$ip" "${ports_display:-Aucun}"
             while IFS= read -r line; do
-                proto_port=$(echo "$line" | awk -F' ' '{print $1}')
-                host_binding=$(echo "$line" | awk -F'->' '{print $2}' | xargs)
-                ports_json+="${first_port==1?"":","}{\"proto_port\":\"$proto_port\",\"host_binding\":\"$host_binding\"}"
-                first_port=0
+                host_port=$(echo "$line" | awk -F'->' '{print $2}' | awk -F':' '{print $2}')
+                [ -n "$host_port" ] && ports_summary["$host_port"]=1
             done <<< "$ports"
-            ports_json+="]"
         fi
-
-        printf '    {"name": "%s", "ip": "%s", "ports": %s}' "$name" "$ip" "$ports_json"
-
-        while IFS= read -r line; do
-            host_port=$(echo "$line" | awk -F'->' '{print $2}' | awk -F':' '{print $2}')
-            [ -n "$host_port" ] && ports_summary["$host_port"]=1
-        done <<< "$ports"
     done
 
-    echo
-    echo "  ],"
-    echo '  "ports_exposes": ['
-
-    first_port=1
-    for port in "${!ports_summary[@]}"; do
-        if (( first_port == 0 )); then
-            echo ","
-        fi
-        first_port=0
-        echo "    \"$port\""
-    done
-
-    echo "  ]"
-    echo "}"
+    echo -e "\n→ Pour un résumé des ports exposés, lance : ./docker-port-list.sh --short\n"
 }
 
-# Début logique
+print_json() {
+    echo '{'
+    echo '  "containers": {'
+
+    projects=$(for id in $containers; do
+        docker inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' "$id"
+    done | sort -u)
+
+    first_project=1
+    for project in $projects; do
+        [ -z "$project" ] && continue
+        if [[ $first_project -eq 0 ]]; then
+            echo ','
+        fi
+        first_project=0
+        echo -n "    \"$project\": ["
+        first_cont=1
+        for id in $containers; do
+            project_label=$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' "$id")
+            if [[ "$project_label" == "$project" ]]; then
+                if [[ $first_cont -eq 0 ]]; then
+                    echo ','
+                fi
+                first_cont=0
+                name=$(docker inspect -f '{{.Name}}' "$id" | cut -c2-)
+                ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$id")
+                ports=$(docker port "$id" | awk '{print $0}' ORS=';')
+                ports=${ports%;} # remove last ;
+                echo -n "      {\"container\": \"$name\", \"ip\": \"$ip\", \"ports\": \"$ports\"}"
+                while IFS= read -r line; do
+                    host_port=$(echo "$line" | awk -F'->' '{print $2}' | awk -F':' '{print $2}')
+                    [ -n "$host_port" ] && ports_summary["$host_port"]=1
+                done <<< "$ports"
+            fi
+        done
+        echo -n "]"
+    done
+
+    # Autres conteneurs sans label
+    other_containers=()
+    for id in $containers; do
+        project_label=$(docker inspect -f '{{ index .Config.Labels "com.docker.compose.project" }}' "$id")
+        if [[ -z "$project_label" ]]; then
+            other_containers+=("$id")
+            ports=$(docker port "$id")
+            while IFS= read -r line; do
+                host_port=$(echo "$line" | awk -F'->' '{print $2}' | awk -F':' '{print $2}')
+                [ -n "$host_port" ] && ports_summary["$host_port"]=1
+            done <<< "$ports"
+        fi
+    done
+
+    if [[ ${#other_containers[@]} -gt 0 ]]; then
+        if [[ $first_project -eq 0 ]]; then
+            echo ','
+        fi
+        echo '    "other": ['
+        first_other=1
+        for id in "${other_containers[@]}"; do
+            if [[ $first_other -eq 0 ]]; then
+                echo ','
+            fi
+            first_other=0
+            name=$(docker inspect -f '{{.Name}}' "$id" | cut -c2-)
+            ip=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' "$id")
+            ports=$(docker port "$id" | awk '{print $0}' ORS=';')
+            ports=${ports%;}
+            echo -n "      {\"container\": \"$name\", \"ip\": \"$ip\", \"ports\": \"$ports\"}"
+        done
+        echo
+        echo '    ]'
+    fi
+
+    echo
+    echo '  }'
+    echo "  // Astuce : ./docker-port-list.sh --short pour résumé des ports exposés"
+    echo '}'
+}
+
+print_summary_hacker_wrapper() {
+    ports=($(get_ports_summary))
+    print_summary_hacker "${ports[@]}"
+}
+
+print_summary_simple_wrapper() {
+    ports=($(get_ports_summary))
+    print_summary_simple "${ports[@]}"
+}
+
+print_summary_json_wrapper() {
+    ports=($(get_ports_summary))
+    print_summary_json "${ports[@]}"
+}
+
+# MAIN
 
 if [[ $SHORT -eq 1 ]]; then
-    ports=($(get_ports_summary))
     if [[ $JSON -eq 1 ]]; then
-        print_summary_json "${ports[@]}"
+        print_summary_json_wrapper
     elif [[ $STYLE -eq 0 ]]; then
-        print_summary_simple "${ports[@]}"
+        print_summary_simple_wrapper
     else
-        print_summary_hacker "${ports[@]}"
+        print_summary_hacker_wrapper
     fi
 else
     if [[ $JSON -eq 1 ]]; then
