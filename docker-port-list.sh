@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# 👨‍💻 Script: docker-port-list — version cinéma hacker avec mode --short
+# 👨‍💻 Script: docker-port-list 
 
 # Couleurs et effets
 GREEN='\033[0;92m'
@@ -12,8 +12,8 @@ print_help() {
     echo -e "${BOLD}Usage:${RESET} $0 [--short] [--help]"
     echo
     echo "Options :"
-    echo "  --short    Affiche un résumé compact des ports exposés par projet"
-    echo "  --help     Affiche ce message d'aide et quitte"
+    echo "  --short    Display a summary of exposed ports by project"
+    echo "  --help     Display this help message"
     exit 0
 }
 
@@ -71,21 +71,21 @@ if $SHORT_MODE; then
         done
     done
 
-    echo -e "${BOLD}${GREEN}📊 Résumé des ports par projet${RESET}"
+    echo -e "${BOLD}${GREEN}📊 Short list of ports by projects${RESET}"
     for project in "${!short_ports[@]}"; do
         # Nettoyage, tri et dédoublonnage
         ports_clean=$(echo -e "${short_ports[$project]}" | grep -E '^[0-9]+$' | sort -nu | paste -sd "," -)
         
         if [[ "$project" == "__other__" ]]; then
-            echo -e "\n📦 ${BOLD}Autres conteneurs (non-compose):${RESET}"
+            echo -e "\n📦 ${BOLD}Others containers (non-compose):${RESET}"
         else
-            echo -e "\n📦 Projet : ${BOLD}$project${RESET}"
+            echo -e "\n📦 Project : ${BOLD}$project${RESET}"
         fi
 
         if [ -n "$ports_clean" ]; then
             echo -e "  → ${GREEN}$ports_clean${RESET}"
         else
-            echo -e "  → ${GREEN}(aucun port exposé)${RESET}"
+            echo -e "  → ${GREEN}(no port exposed)${RESET}"
         fi
     done
     echo ""
@@ -95,12 +95,12 @@ fi
 # 🧪 Anim' hacker (mode complet)
 echo -e "${GREEN}${BOLD}"
 echo "╔═══════════════════════════════════════════════════╗"
-echo "║             SCAN DES CONTENEURS DOCKER           ║"
+echo "║             SCAN DOCKER CONTAINERS                ║"
 echo "╚═══════════════════════════════════════════════════╝"
 echo -ne "${RESET}"
 sleep 0.3
 for i in {1..3}; do
-    echo -ne "${GREEN}> Analyse en cours"
+    echo -ne "${GREEN}> Searching for containers"
     for dot in {1..3}; do
         echo -ne "."
         sleep 0.2
@@ -108,7 +108,7 @@ for i in {1..3}; do
     echo -ne "\r"
     sleep 0.2
 done
-echo -e "${GREEN}✔ Conteneurs détectés.${RESET}\n"
+echo -e "${GREEN}✔ Containers found.${RESET}\n"
 sleep 0.5
 
 # Fonction d'affichage pour les ports formatés
@@ -122,9 +122,9 @@ get_ports_display() {
         local network_mode
         network_mode=$(docker inspect -f '{{.HostConfig.NetworkMode}}' "$id")
         if [[ "$network_mode" == "host" ]]; then
-            echo "Défaut"
+            echo "Default (host)"
         else
-            echo "Aucun"
+            echo "None"
         fi
     fi
 }
@@ -133,7 +133,7 @@ get_ports_display() {
 for project in $projects; do
     [ -z "$project" ] && continue
     echo -e "${BOLD}${GREEN}╔═ Project: $project ═════════════════════════════════════════════════╗${RESET}"
-    printf "${GREEN}║ %-28s │ %-15s │ %-30s ║\n" "CONTAINER" "IP INTERNE" "PORTS EXPOSES"
+    printf "${GREEN}║ %-28s │ %-15s │ %-30s ║\n" "CONTAINER" "IP" "PORTS EXPOSED"
     echo -e "╟──────────────────────────────────────────────────────────────────────╢"
 
     for id in $containers; do
@@ -150,8 +150,8 @@ for project in $projects; do
 done
 
 # Conteneurs sans label docker-compose
-echo -e "${BOLD}${GREEN}╔═ Autres conteneurs (non compose) ═════════════════════════════════════╗${RESET}"
-printf "${GREEN}║ %-28s │ %-15s │ %-30s ║\n" "CONTAINER" "IP INTERNE" "PORTS EXPOSES"
+echo -e "${BOLD}${GREEN}╔═ Others (non compose) ═════════════════════════════════════╗${RESET}"
+printf "${GREEN}║ %-28s │ %-15s │ %-30s ║\n" "CONTAINER" "IP" "PORTS EXPOSED"
 echo -e "╟──────────────────────────────────────────────────────────────────────╢"
 
 for id in $containers; do
