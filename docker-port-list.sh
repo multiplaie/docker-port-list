@@ -7,6 +7,26 @@ GREEN='\033[0;92m'
 BOLD='\033[1m'
 RESET='\033[0m'
 
+# Fonction d'affichage de l'aide
+print_help() {
+    echo -e "${BOLD}Usage:${RESET} $0 [--short] [--help]"
+    echo
+    echo "Options :"
+    echo "  --short    Affiche un résumé compact des ports exposés par projet"
+    echo "  --help     Affiche ce message d'aide et quitte"
+    exit 0
+}
+
+# Check options
+for arg in "$@"; do
+    case "$arg" in
+        --help)
+            print_help
+            ;;
+    esac
+done
+
+
 SHORT_MODE=false
 
 # Vérifie si le mode court est activé
